@@ -1,0 +1,118 @@
+version: "3"
+services:
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hello-dapr
+  service1:
+    build: ./service1
+    ports:
+      - "3000:3000"
+    depends_on:
+      - placement
+    networks:
+      - hello-dapr
+    restart: unless-stopped
+    healthcheck:
+      test: curl --fail http://localhost || exit 1
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
+  service1-dapr:
+    image: "daprio/daprd:edge"
+    ports:
+      - "3500:3500"
+    command:
+      [
+        "./daprd",
+        "--app-id",
+        "service1",
+        "--app-protocol",
+        "http",
+        "--app-channel-address",
+        "service1",
+        "--log-level",
+        "debug",
+        "--app-port",
+        "3000",
+        "--dapr-http-port",
+        "3500",
+        "--placement-host-address",
+        "placement:50006",
+        "--resources-path",
+        "/components",
+      ]
+    volumes:
+      - "./components/:/components"
+    depends_on:
+      redis:
+        condition: service_healthy
+      service1:
+        condition: service_started
+    networks:
+      - hello-dapr
+
+  service2:
+    build: ./service2
+    ports:
+      - "3001:3001"
+    depends_on:
+      - placement
+    networks:
+      - hello-dapr
+
+  service2-dapr:
+    image: "daprio/daprd:edge"
+    ports:
+      - "3501:3501"
+    command:
+      [
+        "./daprd",
+        "--app-id",
+        "service2",
+        "--app-protocol",
+        "http",
+        "--app-channel-address",
+        "service2",
+        "--log-level",
+        "debug",
+        "--app-port",
+        "3001",
+        "--dapr-http-port",
+        "3501",
+        "--placement-host-address",
+        "placement:50006",
+        "--resources-path",
+        "/components",
+      ]
+    volumes:
+      - "./components/:/components"
+    depends_on:
+      redis:
+        condition: service_healthy
+      service2:
+        condition: service_started
+
+    networks:
+      - hello-dapr
+
+  placement:
+    image: "daprio/dapr"
+    command: ["./placement", "--port", "50006"]
+    ports:
+      - "50006:50006"
+    networks:
+      - hello-dapr
+
+networks:
+  hello-dapr:
+    driver: bridge

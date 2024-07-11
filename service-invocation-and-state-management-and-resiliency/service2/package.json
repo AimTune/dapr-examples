@@ -1,0 +1,10 @@
+{
+    "name": "service2",
+    "version": "1.0.0",
+    "main": "app.js",
+    "dependencies": {
+      "express": "^4.17.1",
+      "axios": "^0.21.1"
+    }
+  }
+  

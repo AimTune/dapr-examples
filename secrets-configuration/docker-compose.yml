@@ -1,0 +1,89 @@
+version: "3.7"
+services:
+  redis:
+    image: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hello-dapr
+  vault:
+    image: vault:1.7.3
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://0.0.0.0:8200"
+    volumes:
+      - ./vault/data:/vault/data
+    networks:
+      - hello-dapr
+
+  secret:
+    build: ./secret
+    ports:
+      - "5000:8080"
+    depends_on:
+      - vault
+      - placement
+    networks:
+      - hello-dapr
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:5000/healthz"]
+      interval: 60s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
+  secret-dapr:
+    image: "daprio/daprd:edge"
+    ports:
+      - "3500:3500"
+      - "50001:50001"
+    command:
+      [
+        "./daprd",
+        "--app-id",
+        "secret",
+        "--app-protocol",
+        "http",
+        "--app-channel-address",
+        "secret:8080",
+        "--log-level",
+        "debug",
+        "--app-port",
+        "8080",
+        "--dapr-http-port",
+        "3500",
+        "-dapr-grpc-port",
+        "50001",
+        "--placement-host-address",
+        "placement:50006",
+        "--resources-path",
+        "/components",
+      ]
+    volumes:
+      - "./components/:/components"
+    depends_on:
+      secret:
+        condition: service_started
+    networks:
+      - hello-dapr
+
+  placement:
+    image: "daprio/dapr"
+    command: ["./placement", "--port", "50006"]
+    ports:
+      - "50006:50006"
+    networks:
+      - hello-dapr
+
+networks:
+  hello-dapr:
+    driver: bridge
